@@ -1,0 +1,268 @@
+---
+title: "final_project"
+author: "Jason Dai, Andrew Zhao, Yunfan Long"
+date: "2023-05-31"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+# Application Questions
+
+## Question 1
+```{r}
+library(ISLR2)
+data("Carseats")
+Carseats
+```
+
+### (a)
+```{r}
+response <- Carseats$Sales
+Carseats_new <- Carseats[, -which(names(Carseats) == "Sales")]
+lm.fit <- lm(response ~., data = Carseats_new)
+summary(lm.fit)
+```
+
+### (b)
+```{r}
+par(mfrow = c(2, 2))
+plot(lm.fit)
+```
+According to the graph we don't have a pattern in residual, we have a constant variance in residual plot which implies homoscedasticity. There is also Uncorrelated error and according to the Q-Q plot normality also holds. Thus we conclude a linear model is appropriate.
+```{r}
+plot(predict(lm.fit), residuals(lm.fit))
+```
+According to the graph, our linear model's prediction is close to the actual sales values and there's not an obvious shape in the residual plot so we condlude a linear model is appropriate.
+
+### (c)
+Null hypothesis: beta1 =0 and beta2 =0
+Since the Pr(>|t|) for `CompPrice` and `Income` are lower than 0.05, we conclude that the hypothesis doesn't hold.
+
+## Question 2
+
+### (a)
+```{r}
+library(glmnet)
+set.seed((7))
+train_idx <- sample(seq_len(nrow(Carseats)), size = 0.8 * nrow(Carseats))
+train_data <- Carseats[train_idx, ]
+test_data1 <- Carseats[-train_idx, ]
+x_train <- model.matrix(~+ShelveLoc+Urban+US+CompPrice+Income+Advertising+Population+Price+Age+Education,data=train_data)
+y_train <- train_data$Sales
+test_data <- model.matrix(~Sales+ShelveLoc+Urban+US+CompPrice+Income+Advertising+Population+Price+Age+Education, data = test_data1)[, 2:13]
+test_data
+```
+
+### (b)
+```{r}
+set.seed(7)
+cv_model <- cv.glmnet(x_train, y_train, alpha = 0, nfolds = 5)
+lambda_optimal <- cv_model$lambda.min
+ridge_model <- glmnet(x_train, y_train, alpha = 0, lambda = lambda_optimal)
+coefficients <- coef(ridge_model)
+print(coefficients)
+```
+
+### (c)
+```{r}
+predicted_values <- predict(ridge_model, newx = test_data)
+rmse <- sqrt(mean((predicted_values - test_data[, "Sales"])^2))
+rmse
+```
+
+### (d)
+```{r}
+library(randomForest)
+rf_model <- randomForest(Sales ~ ., data = train_data, ntree = 50)
+predicted_rf_values <- predict(rf_model, newdata = test_data1)
+rmse_rf <- sqrt(mean((predicted_rf_values - test_data1$Sales)^2))
+rmse_rf
+```
+
+### (e)
+As the ridge_model and the random forest model have different role that the market team need to make decisions, the team may prefer to use the random forest if they want to maximize the accuracy of their predictions, also, if the market team want to understand which predictor has what kind of impact on prediction, then they may want to use the ridge regression model. 
+
+## Question 3
+
+### (a)
+```{r}
+set.seed(1)
+n <- 200
+X <- rt(n, df=15)
+```
+
+### (b)
+```{r}
+epsilon <- rt(n, df=5)
+```
+
+### (c)
+```{r}
+Y <- 5 + 2*sin(X) - 7*exp(2*cos(X))/(1+exp(2*cos(X))) + epsilon
+```
+
+### (d)
+```{r}
+df <- data.frame(X, Y)
+
+colors <- c('red', 'darkblue', 'darkgreen', 'purple', 'orange')
+legends <- character()
+
+plot(X, Y, ylim = c(-10, 10))
+
+for (i in 1:5) {
+    fit <- lm(Y ~ poly(X, i), data=df)
+    preds <- predict(fit, df)
+    lines(sort(X), sort(preds), col=colors[i])
+    legends <- c(legends, paste('Order', i))
+}
+
+legend('bottomright', legend=legends, col=colors, lty=1, cex = 0.5)
+```
+
+### (e)
+I would prefer the order 2 model because it captures the general trend of the data without being overfitting to the specific orginal dataset. The order 1 model fails to capture the curvature of the data and thus is too simple for modeling. However, model with order 3, 4, and 5 are overfiting to the original dataset, as we can see some zig-zag parttern, meaning it's overfitting to the trend specific to this dataset. Therefore, I would prefer order 2 model because it fits the shape of the data and is not prone to overfitting.
+
+### (f)
+```{r}
+fit_lsq <- lm(Y ~ poly(X, 2), data=df)
+predict(fit_lsq, newdata=data.frame(X=1), interval="confidence", level=0.9)
+```
+
+As shown above, the 90% confidence for prediction using least squares theory is (0.6037489, 1.076709). This means we are 90% confident that the true mean value of the response variable Y would fall into this interval. 
+
+### (g)
+```{r}
+library(boot)
+
+boot_func <- function(data, indices) {
+  df <- data[indices, ] 
+  fit <- lm(Y ~ poly(X, 2), df)
+  return(predict(fit, newdata=data.frame(X=1)))
+}
+
+boot_out <- boot(df, boot_func, 1000)
+
+
+boot.ci(boot_out, type="basic", conf=0.90)
+```
+
+As shown above, the 90% confidence for prediction using bootstrap is (0.5882, 1.0672). This means we are 90% confident that the true mean value of the response variable Y would fall into this interval. Unlike the least square model, the bootstrap model avoids making assumptions about the data and residuals because the calculation is essentially a process of sampling 1000 times with replacement, fitting model, and calculate prediction value of y at X = 1. Since we let go of some assumptions, the resulting interval is comparatively wider as a trade-off.
+
+## Question 4
+
+### (a)
+```{r}
+train_idx <- sample(seq_len(nrow(College)), size = 0.8 * nrow(College))
+train_data_college <- College[train_idx, ]
+test_data_college <- College[-train_idx, ]
+```
+
+### (b)
+```{r}
+logit_model = glm(Private ~ ., data = train_data_college, family = "binomial")
+coefficients <- coef(logit_model)
+coefficients
+```
+The interpretation of the coefficient of `Top10perc` is that there is a `1.907536e-02` log-odds or probability increase that the college is a private college.
+
+### (c)
+```{r}
+predicted_labels <- predict(logit_model, newdata = test_data_college, type = "response")
+class_preds <- predicted_labels > 0.5
+table <- table(test_data_college$Private, class_preds)
+1 - sum(diag(table)) / sum(table)
+```
+
+### (d)
+```{r}
+library(MASS)
+```
+```{r}
+model_lda <- lda(Private ~ ., data = train_data_college)
+predictions_lda <- predict(model_lda, newdata = test_data_college)$class
+table(predictions_lda, test_data_college$Private)
+```
+```{r}
+1 - mean(predictions_lda == test_data_college$Private)
+```
+
+### (e)
+```{r}
+library(MASS)
+model_qda <- qda(Private ~ ., data = train_data_college)
+predictions_qda <- predict(model_qda, newdata = test_data_college)$class
+table(predictions_qda, test_data_college$Private)
+```
+```{r}
+1 - mean(predictions_qda == test_data_college$Private)
+```
+
+### (f)
+```{r}
+library(e1071)
+svmfit <- svm(Private ~ ., data = train_data_college , kernel = "linear", cost = 0.1)
+ypred <- predict(svmfit, test_data_college)
+table(predict=ypred, truth  = test_data_college$Private)
+```
+
+```{r}
+1 - mean(ypred == test_data_college$Private)
+```
+
+### (g)
+I will choose LDA because it has the best performance on the test set with the lowest test error
+
+## Question 5
+
+```{r}
+Sys.setenv("RGL_USE_NULL"="TRUE")
+library(MultBiplotR)
+data(Protein)
+```
+
+### (a)
+```{r}
+
+protein <- Protein[, !(names(Protein) %in% c('Comunist', 'Region'))]
+protein
+
+pca <- prcomp(protein, scale = TRUE)
+
+prop_var <- pca$sdev^2 / sum(pca$sdev^2)
+print(prop_var[1:5])
+
+cum_prop_var <- cumsum(prop_var)
+print(cum_prop_var[1:5])
+
+```
+
+### (b)
+```{r}
+pca$rotation[,1:2]
+```
+For the first eigenvector, it seems like nuts, cereals, and eggs have relatively high absolute coefficient values, while other variables have relatively low absolute coefficient values. This eigenvector clearly correspond to the consumption of nuts, cereals, and eggs. The second eigenvector have fish and fruits_vegetable as having relatively large coefficient values. This vector instead correspond to the measurement of consumption of fish and fruits_vegetables.
+
+### (c)
+```{r}
+biplot(pca, scale = 0,expand=1, xlim=c(-9,9),ylim=c(-1.9,4.3),cex = 0.5)
+```
+From the biplot above, it seems that milk is:
+(i) most positively correlated with white_meat
+(ii) most negatively correlated with nuts
+(iii) uncorrelated with fish
+
+### (d)
+It seems like the Center has relatively higher consumption on red meat, white meat, and vegetables. However, the North has relatively higher consumption on milk. Both have similar consumption of cereal and nuts.
+
+
+
+## Question 6
+It may be more beneficial because bootstrapping creates multiple subsets by random sampling. Since random forest is built by combining multiple decision trees, bootstrapping introduces diversity. The second reason is that the bootstrapping strategy can help random forest handle high-dimensional data by training different subsets. The last reason is that the bootstrapping strategy can make random forest more robust to outliers since the data are splitted into different subsets and the effect if outliers will dramatically decrease.
+
+## Question 7
+Since `FWER` and `FDR` is used to avoid type I error, and as we know that if we put the type I error to a very low level, the level of type II error will increase, so we would not want to have the type II error value increase a lot when making type I error is that a medicine is incorrectly justified as effective and was used on some patient, and the type II error is the medicine is incorrectly justified as ineffective, while it is actually effective, this would delay treatment time of some patients and that is more severe, so we would not want to correct `FWER` and `FDR` in this case. 
+
+## Question 8
+It is necessary because if the assumptions are not met, there would be no guarantee of the validity of the inferences or predictions we make. This could lead to situations where the results are wrong, misleading, or cannot be interpreted properly.
